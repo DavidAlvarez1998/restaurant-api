@@ -1,8 +1,10 @@
 package com.david.restaurant.application.service;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,12 +15,14 @@ import com.david.restaurant.domain.exception.orden.OrdenNotFoundException;
 import com.david.restaurant.domain.exception.producto.ProductoNotFoundException;
 import com.david.restaurant.domain.model.Ingrediente;
 import com.david.restaurant.domain.model.Mesa;
+import com.david.restaurant.domain.model.MetodoPago;
 import com.david.restaurant.domain.model.Orden;
 import com.david.restaurant.domain.model.OrdenItem;
 import com.david.restaurant.domain.model.OrdenItemIngrediente;
 import com.david.restaurant.domain.model.Pago;
 import com.david.restaurant.domain.model.EstadoOrden;
 import com.david.restaurant.domain.model.Producto;
+import com.david.restaurant.domain.model.ReporteVentas;
 import com.david.restaurant.domain.model.TipoOrden;
 import com.david.restaurant.domain.port.input.OrdenServicePort;
 import com.david.restaurant.domain.port.output.IngredienteRepositoryPort;
@@ -233,5 +237,73 @@ public class OrdenService implements OrdenServicePort {
         
         return ordenRepositoryPort.save(orden);
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Orden> findOrdenesPendientes() {
+        return findAll().stream()
+            .filter(o -> o.getEstado() == EstadoOrden.ABIERTA 
+                      || o.getEstado() == EstadoOrden.EN_PREPARACION)
+            .collect(java.util.stream.Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Orden> findOrdenesFinalizadas() {
+        return findAll().stream()
+            .filter(o -> o.getEstado() == EstadoOrden.PAGADA
+                      || o.getEstado() == EstadoOrden.CANCELADA)
+            .sorted((a, b) -> b.getFechaCreacion().compareTo(a.getFechaCreacion()))
+            .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ReporteVentas getReporteVentas(LocalDate fechaInicio, LocalDate fechaFin) {
+        List<Orden> ordenesPagadas = findAll().stream()
+            .filter(o -> o.getEstado() == EstadoOrden.PAGADA)
+            .filter(o -> {
+                LocalDate fechaOrden = o.getFechaCreacion().toLocalDate();
+                return !fechaOrden.isBefore(fechaInicio) && !fechaOrden.isAfter(fechaFin);
+            })
+            .collect(Collectors.toList());
+
+        double totalVentas = 0.0;
+        double totalPropinas = 0.0;
+        double totalEfectivo = 0.0;
+        double totalTarjeta = 0.0;
+        double totalTransferencia = 0.0;
+
+        for (Orden orden : ordenesPagadas) {
+            if (orden.getPagos() != null) {
+                for (Pago pago : orden.getPagos()) {
+                    totalVentas += pago.getMontoPagado();
+                    totalPropinas += pago.getPropina() != null ? pago.getPropina() : 0.0;
+
+                    if (pago.getMetodoPago() == MetodoPago.EFECTIVO) {
+                        totalEfectivo += pago.getMontoPagado();
+                    } else if (pago.getMetodoPago() == MetodoPago.TARJETA) {
+                        totalTarjeta += pago.getMontoPagado();
+                    } else if (pago.getMetodoPago() == MetodoPago.TRANSFERENCIA) {
+                        totalTransferencia += pago.getMontoPagado();
+                    }
+                }
+            }
+        }
+
+        return new ReporteVentas(
+            fechaInicio,
+            fechaFin,
+            totalVentas,
+            totalPropinas,
+            totalEfectivo,
+            totalTarjeta,
+            totalTransferencia,
+            (long) ordenesPagadas.size()
+        );
+    }
+
+
+
 
 }

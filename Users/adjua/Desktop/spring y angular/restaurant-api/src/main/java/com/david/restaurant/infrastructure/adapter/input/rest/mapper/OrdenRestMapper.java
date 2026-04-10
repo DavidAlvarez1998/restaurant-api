@@ -123,7 +123,7 @@ public class OrdenRestMapper {
         );
     }
 
-     private PagoResponse toPagoResponse(Pago pago) {
+    private PagoResponse toPagoResponse(Pago pago) {
         if (pago == null) return null;
         return new PagoResponse(
             pago.getId(),
@@ -137,10 +137,39 @@ public class OrdenRestMapper {
     public Pago toPagoDomain(PagoRequest request) {
         if (request == null) return null;
         Pago pago = new Pago();
-        pago.setMetodoPago(com.david.restaurant.domain.model.MetodoPago.valueOf(request.metodoPago()));
+        pago.setMetodoPago(MetodoPago.valueOf(request.metodoPago()));
         pago.setMontoPagado(request.montoPagado());
         pago.setPropina(request.propina() != null ? request.propina() : 0.0);
         return pago;
     }
+
+    public OrdenCocinaResponse toCocinaResponse(Orden orden) {
+        if (orden == null) return null;
+
+        List<OrdenCocinaItemResponse> itemsCocina = orden.getItems() != null
+            ? orden.getItems().stream().map(item -> new OrdenCocinaItemResponse(
+                item.getId(),
+                item.getProducto() != null ? item.getProducto().getNombre() : null,
+                item.getCantidad(),
+                item.getNotas(),
+                item.getIngredientes() != null
+                    ? item.getIngredientes().stream()
+                        .map(ing -> ing.getIngrediente() != null ? ing.getIngrediente().getNombre() : null)
+                        .collect(Collectors.toList())
+                    : Collections.emptyList()
+            )).collect(Collectors.toList())
+            : Collections.emptyList();
+
+        return new OrdenCocinaResponse(
+            orden.getId(),
+            orden.getTipoOrden() != null ? orden.getTipoOrden().name() : null,
+            orden.getMesa() != null ? orden.getMesa().getNumero() : null,
+            orden.getNombreCliente(),
+            orden.getFechaCreacion(),
+            orden.getEstado() != null ? orden.getEstado().name() : null,
+            itemsCocina
+        );
+        }
+
 
 }
